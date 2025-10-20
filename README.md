@@ -18,7 +18,7 @@ Interactive Plotly-based moment map visualization tool for FITS spectral cubes, 
 ### From source (development)
 
 ```bash
-git clone https://github.com/yourusername/moment-explorer.git
+git clone https://github.com/jeaadams/moment-explorer.git
 cd moment-explorer
 pip install -e .
 ```
