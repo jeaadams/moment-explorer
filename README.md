@@ -8,10 +8,7 @@ Interactive Plotly-based moment map visualization tool for FITS spectral cubes, 
 
 ## Features
 
-- **Smooth, responsive UI** using Plotly's FigureWidget with persistent zoom/pan
-- **Debounced updates** (~200ms) for smooth slider interactions
 - **Multiple moment types**: M0 (integrated intensity), M1 (velocity), M8 (peak intensity), M9 (linewidth)
-- **Performance optimizations**: Optional prefix-sum acceleration for M0/M1 computation
 - **WCS support**: Automatic coordinate display when FITS headers are available
 - **Interactive controls**: ipywidgets for channel range, clipping, masking, and color scales
 - **One-click FITS export**: Save moment maps directly from the UI
