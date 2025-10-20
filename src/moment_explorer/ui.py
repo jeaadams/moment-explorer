@@ -403,3 +403,151 @@ def create_interactive_explorer(cube_path, mask_path=None, enable_prefix_sums=Tr
     ui.display()
 
     return explorer, ui
+
+
+def create_multi_cube_explorer(available_cubes, enable_prefix_sums=True, default_cube=None):
+    """
+    Create an interactive explorer with a dropdown to switch between multiple cubes.
+
+    Args:
+        available_cubes (dict): Dictionary of cube configurations with structure:
+            {
+                'Cube Name': {
+                    'cube': '/path/to/cube.fits',
+                    'mask': '/path/to/mask.fits',  # optional
+                    'name': 'Display Name'  # optional, for plot titles
+                },
+                ...
+            }
+        enable_prefix_sums (bool): Enable prefix-sum optimization for M0/M1.
+        default_cube (str): Key of the default cube to load. If None, loads first cube.
+
+    Returns:
+        tuple: (MomentMapExplorer, MomentMapUI, cube_selector_widget)
+
+    Example:
+        >>> available_cubes = {
+        ...     'N2H+ (2013SG2)': {
+        ...         'cube': 'path/to/N2H+.fits',
+        ...         'mask': 'path/to/N2H+.mask.fits',
+        ...         'name': 'N$_2$H$^+$'
+        ...     },
+        ...     'HCN (2013SG1)': {
+        ...         'cube': 'path/to/HCN.fits',
+        ...         'mask': 'path/to/HCN.mask.fits',
+        ...     }
+        ... }
+        >>> explorer, ui, selector = create_multi_cube_explorer(available_cubes)
+    """
+    from .explorer import MomentMapExplorer
+
+    if not available_cubes:
+        raise ValueError("available_cubes dictionary cannot be empty")
+
+    # Determine which cube to load first
+    if default_cube is None:
+        default_cube = list(available_cubes.keys())[0]
+    elif default_cube not in available_cubes:
+        raise ValueError(f"default_cube '{default_cube}' not found in available_cubes")
+
+    # Create explorer
+    explorer = MomentMapExplorer()
+
+    # Create cube selector dropdown
+    cube_selector = widgets.Dropdown(
+        options=list(available_cubes.keys()),
+        value=default_cube,
+        description='Cube:',
+        style={'description_width': '100px'}
+    )
+
+    # Output for loading messages
+    load_output = widgets.Output()
+
+    # Function to load selected cube
+    def load_selected_cube(cube_name):
+        with load_output:
+            load_output.clear_output(wait=True)
+            cube_info = available_cubes[cube_name]
+            cube_path = cube_info['cube']
+            mask_path = cube_info.get('mask', None)
+
+            print(f"Loading {cube_name}...")
+
+            info = explorer.load_cube(cube_path, mask_path)
+
+            print(f"✓ Cube loaded: {info['shape']}")
+            print(f"  Velocity range: {info['vel_range'][0]:.2f} to {info['vel_range'][1]:.2f} km/s")
+            print(f"  RMS: {info['rms']:.3e}")
+
+            # Update channel slider ranges
+            n_channels = info['n_channels']
+            if hasattr(explorer, '_ui'):
+                explorer._ui.widgets['first_channel'].max = n_channels - 1
+                explorer._ui.widgets['last_channel'].max = n_channels - 1
+                # Reset to reasonable defaults
+                explorer._ui.widgets['first_channel'].value = max(0, n_channels // 4)
+                explorer._ui.widgets['last_channel'].value = min(n_channels - 1, 3 * n_channels // 4)
+
+                # Regenerate moment map with new cube
+                explorer._ui._on_apply()
+
+    # Callback for dropdown change
+    def on_cube_change(change):
+        if change['type'] == 'change' and change['name'] == 'value':
+            load_selected_cube(change['new'])
+
+    cube_selector.observe(on_cube_change, names='value')
+
+    # Load initial cube
+    load_selected_cube(default_cube)
+
+    # Enable prefix sums if requested
+    if enable_prefix_sums:
+        explorer.enable_prefix_sums(True)
+        print("Prefix-sum optimization enabled for M0/M1")
+
+    # Create UI
+    ui = MomentMapUI(explorer)
+    explorer._ui = ui  # Store reference for cube switching
+
+    # Create combined UI with cube selector at top
+    selector_box = widgets.HBox([cube_selector])
+
+    # Get the original UI components
+    controls_left = widgets.VBox([
+        ui.widgets['moment'],
+        ui.widgets['first_channel'],
+        ui.widgets['last_channel'],
+        ui.widgets['clip_sigma'],
+    ])
+
+    controls_right = widgets.VBox([
+        ui.widgets['use_mask'],
+        ui.widgets['colorscale'],
+        ui.widgets['auto_apply'],
+    ])
+
+    controls = widgets.HBox([controls_left, controls_right])
+
+    buttons = widgets.HBox([
+        ui.widgets['apply_button'],
+        ui.widgets['save_button'],
+        ui.widgets['reset_button']
+    ])
+
+    # Combined UI with cube selector at the very top
+    combined_ui = widgets.VBox([
+        selector_box,
+        load_output,
+        widgets.HTML('<hr style="margin: 10px 0;">'),  # Separator
+        controls,
+        buttons,
+        ui._status_label,
+        ui.fig,
+        ui._save_output
+    ])
+
+    display(combined_ui)
+
+    return explorer, ui, cube_selector
