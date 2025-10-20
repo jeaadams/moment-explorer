@@ -98,6 +98,18 @@ jupyter notebook interactive_moment_maker.ipynb
 
 ## Troubleshooting
 
+### Issue: "Using standard Heatmap" message or slow rendering
+
+**Solution**: Your Plotly version doesn't support Heatmapgl (WebGL acceleration). Upgrade for better performance:
+
+```bash
+pip install --upgrade plotly>=5.14
+```
+
+Note: The package works fine with older Plotly versions, just without WebGL acceleration.
+
+---
+
 ### Issue: `ModuleNotFoundError: No module named 'bettermoments'`
 
 **Solution**: Install bettermoments:

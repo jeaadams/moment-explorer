@@ -73,15 +73,30 @@ class MomentMapUI:
             x = np.arange(initial_map.shape[1])
             y = np.arange(initial_map.shape[0])
 
-        # Use Heatmapgl for performance
-        self.fig = go.FigureWidget(
-            data=[go.Heatmapgl(
+        # Try Heatmapgl first (WebGL accelerated), fallback to Heatmap
+        try:
+            heatmap_trace = go.Heatmapgl(
                 z=initial_map,
                 x=x,
                 y=y,
                 coloraxis="coloraxis",
                 hovertemplate='x: %{x:.2f}<br>y: %{y:.2f}<br>value: %{z:.3e}<extra></extra>'
-            )],
+            )
+            self._using_webgl = True
+        except (AttributeError, ImportError):
+            # Heatmapgl not available, use standard Heatmap
+            heatmap_trace = go.Heatmap(
+                z=initial_map,
+                x=x,
+                y=y,
+                coloraxis="coloraxis",
+                hovertemplate='x: %{x:.2f}<br>y: %{y:.2f}<br>value: %{z:.3e}<extra></extra>'
+            )
+            self._using_webgl = False
+            print("Note: Using standard Heatmap (Heatmapgl not available). Performance may be slower for large maps.")
+
+        self.fig = go.FigureWidget(
+            data=[heatmap_trace],
             layout=dict(
                 coloraxis=dict(
                     colorscale="Viridis",

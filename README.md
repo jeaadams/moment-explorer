@@ -218,7 +218,7 @@ pytest
 
 **Issue**: Slow updates even with prefix sums enabled
 
-**Solution**: Ensure you're using `Heatmapgl` instead of `Heatmap`. The UI automatically selects `Heatmapgl` for WebGL-accelerated rendering.
+**Solution**: The UI automatically tries to use `Heatmapgl` (WebGL-accelerated) but falls back to standard `Heatmap` if not available. If you see the message "Using standard Heatmap", consider upgrading Plotly: `pip install --upgrade plotly`
 
 ---
 
@@ -231,6 +231,12 @@ pytest
 **Issue**: "No cube loaded" error
 
 **Solution**: Ensure `load_cube()` is called before `generate()` or creating the UI.
+
+---
+
+**Issue**: `AttributeError: module 'plotly.graph_objects' has no attribute 'Heatmapgl'`
+
+**Solution**: This is automatically handled by the fallback to standard `Heatmap`. The package works with older Plotly versions. To get better performance with WebGL acceleration, upgrade Plotly: `pip install --upgrade plotly>=5.0`
 
 ## License
 
