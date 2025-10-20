@@ -288,19 +288,51 @@ class MomentMapExplorer:
         if self.current_moment is None:
             raise RuntimeError("No moment map to save. Call generate() first.")
 
-        if path is None:
-            # Use cube path and current moment type
-            method_map = {'M0': 'zeroth', 'M1': 'first', 'M8': 'eighth', 'M9': 'ninth'}
-            method = method_map[self.current_params['moment']]
-            bm.save_to_FITS(moments=self.current_moment, method=method, path=self.cube_path)
-            path = self.cube_path.replace('.fits', f'_{self.current_params["moment"]}.fits')
-        else:
-            # Save to custom path
-            method_map = {'M0': 'zeroth', 'M1': 'first', 'M8': 'eighth', 'M9': 'ninth'}
-            method = method_map[self.current_params['moment']]
-            bm.save_to_FITS(moments=self.current_moment, method=method, path=path)
+        # bettermoments.save_to_FITS expects moments as a tuple/list for some methods
+        # Wrap the moment map to ensure compatibility
+        moment_data = self.current_moment
 
-        return path
+        # Determine output path and method
+        method_map = {'M0': 'zeroth', 'M1': 'first', 'M8': 'eighth', 'M9': 'ninth'}
+        method = method_map[self.current_params['moment']]
+
+        if path is None:
+            # Auto-generate path from cube path
+            output_path = self.cube_path.replace('.fits', f'_{self.current_params["moment"]}.fits')
+        else:
+            output_path = path
+
+        # Save using bettermoments
+        try:
+            bm.save_to_FITS(moments=moment_data, method=method, path=self.cube_path)
+            # bettermoments saves to cube_path with method suffix, find the actual file
+            return self.cube_path.replace('.fits', f'_{self.current_params["moment"]}.fits')
+        except (ValueError, TypeError, AttributeError) as e:
+            # If bettermoments fails, save manually with astropy
+            from astropy.io import fits
+
+            # Create a 2D header from the 3D cube header
+            header_2d = self.header.copy()
+
+            # Remove spectral axis keywords
+            keys_to_remove = ['NAXIS3', 'CTYPE3', 'CRVAL3', 'CDELT3', 'CRPIX3', 'CUNIT3']
+            for key in keys_to_remove:
+                if key in header_2d:
+                    del header_2d[key]
+
+            # Update NAXIS to 2
+            header_2d['NAXIS'] = 2
+
+            # Add comment about the moment map
+            header_2d['COMMENT'] = f'Moment {self.current_params["moment"]} map'
+            header_2d['COMMENT'] = f'Generated with moment-explorer'
+            header_2d['BUNIT'] = 'Jy/beam' if method in ['zeroth', 'eighth'] else 'km/s'
+
+            # Create HDU and save
+            hdu = fits.PrimaryHDU(moment_data, header=header_2d)
+            hdu.writeto(output_path, overwrite=True)
+
+            return output_path
 
     def get_wcs_extent(self):
         """
