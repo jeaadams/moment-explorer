@@ -103,8 +103,7 @@ class MomentMapUI:
                     cmin=vmin,
                     cmax=vmax,
                     colorbar=dict(
-                        title="Integrated Intensity",
-                        titleside="right"
+                        title=dict(text="Integrated Intensity")
                     )
                 ),
                 uirevision="moment_explorer_v1",  # Persist zoom/pan
@@ -305,7 +304,7 @@ class MomentMapUI:
             self.fig.data[0].z = moment_map
             self.fig.layout.coloraxis.cmin = vmin
             self.fig.layout.coloraxis.cmax = vmax
-            self.fig.layout.coloraxis.colorbar.title = colorbar_labels.get(
+            self.fig.layout.coloraxis.colorbar.title.text = colorbar_labels.get(
                 moment_type, 'Intensity'
             )
 
