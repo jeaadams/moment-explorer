@@ -34,7 +34,44 @@ pip install -e .
 
 ## Quick Start
 
-### Interactive UI
+### Option 1: Multi-Cube Explorer with Dropdown (Recommended)
+
+**NEW!** Easily switch between multiple cubes with a dropdown selector:
+
+```python
+from moment_explorer import create_multi_cube_explorer
+import os
+
+# Define your cubes
+available_cubes = {
+    'N2H+': {
+        'cube': 'path/to/N2H+_cube.fits',
+        'mask': 'path/to/N2H+_mask.fits',
+    },
+    'HCN': {
+        'cube': 'path/to/HCN_cube.fits',
+        'mask': 'path/to/HCN_mask.fits',
+    }
+}
+
+# Create explorer with cube selector
+explorer, ui, selector = create_multi_cube_explorer(available_cubes)
+```
+
+### Option 2: Interactive Launcher UI
+
+**NEW!** Point-and-click file selection interface:
+
+```python
+from moment_explorer import create_launcher_ui
+from IPython.display import display
+
+# Display file browser UI
+display(create_launcher_ui())
+# Fill in paths and click "Launch Explorer"
+```
+
+### Option 3: Single Cube Explorer
 
 ```python
 from moment_explorer import create_interactive_explorer
@@ -47,13 +84,28 @@ explorer, ui = create_interactive_explorer(
 )
 ```
 
-The UI will display automatically with:
+### Option 4: Cube Viewer (Channel Explorer)
+
+**NEW!** Explore individual channels with mask overlay:
+
+```python
+from moment_explorer import create_cube_viewer
+
+# Create channel-by-channel viewer
+viewer = create_cube_viewer(
+    cube_path='path/to/cube.fits',
+    mask_path='path/to/mask.fits'  # optional
+)
+```
+
+All UI options display automatically with:
 - Dropdown for moment type selection (M0, M1, M8, M9)
 - Sliders for channel range and clipping threshold
 - Checkbox for mask application
 - Color scale selector
 - Auto-apply toggle with debouncing
 - Apply, Save FITS, and Reset View buttons
+- **NEW:** Sigma clipping now works for all moment types with smart warnings!
 
 ### Programmatic Usage
 
