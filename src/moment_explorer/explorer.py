@@ -295,9 +295,9 @@ class MomentMapExplorer:
         if self.current_moment is None:
             raise RuntimeError("No moment map to save. Call generate() first.")
 
-        # bettermoments.save_to_FITS expects moments as a tuple/list for some methods
-        # Wrap the moment map to ensure compatibility
-        moment_data = self.current_moment
+        # bettermoments.save_to_FITS expects moments as a 3D array (n_outputs, ny, nx)
+        # Wrap the 2D moment map to add the first dimension
+        moment_data = np.expand_dims(self.current_moment, axis=0)
 
         # Determine output path and method
         method_map = {'M0': 'zeroth', 'M1': 'first', 'M8': 'eighth', 'M9': 'ninth'}
