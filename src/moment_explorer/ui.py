@@ -337,8 +337,11 @@ class MomentMapUI:
         with self._save_output:
             self._save_output.clear_output()
             try:
+                import os
                 path = self.explorer.save()
-                print(f"✓ Moment map saved to: {path}")
+                abs_path = os.path.abspath(path)
+                print(f"✓ Moment map saved to:")
+                print(f"  {abs_path}")
             except Exception as e:
                 print(f"✗ Error saving: {str(e)}")
 

@@ -295,51 +295,43 @@ class MomentMapExplorer:
         if self.current_moment is None:
             raise RuntimeError("No moment map to save. Call generate() first.")
 
-        # bettermoments.save_to_FITS expects moments as a 3D array (n_outputs, ny, nx)
-        # Wrap the 2D moment map to add the first dimension
-        moment_data = np.expand_dims(self.current_moment, axis=0)
-
-        # Determine output path and method
-        method_map = {'M0': 'zeroth', 'M1': 'first', 'M8': 'eighth', 'M9': 'ninth'}
-        method = method_map[self.current_params['moment']]
-
+        # Determine output path
         if path is None:
             # Auto-generate path from cube path
             output_path = self.cube_path.replace('.fits', f'_{self.current_params["moment"]}.fits')
         else:
             output_path = path
 
-        # Save using bettermoments
-        try:
-            bm.save_to_FITS(moments=moment_data, method=method, path=self.cube_path)
-            # bettermoments saves to cube_path with method suffix, find the actual file
-            return self.cube_path.replace('.fits', f'_{self.current_params["moment"]}.fits')
-        except (ValueError, TypeError, AttributeError) as e:
-            # If bettermoments fails, save manually with astropy
-            from astropy.io import fits
+        # Create a 2D header from the 3D cube header
+        header_2d = self.header.copy()
 
-            # Create a 2D header from the 3D cube header
-            header_2d = self.header.copy()
+        # Remove spectral axis keywords
+        keys_to_remove = ['NAXIS3', 'CTYPE3', 'CRVAL3', 'CDELT3', 'CRPIX3', 'CUNIT3']
+        for key in keys_to_remove:
+            if key in header_2d:
+                del header_2d[key]
 
-            # Remove spectral axis keywords
-            keys_to_remove = ['NAXIS3', 'CTYPE3', 'CRVAL3', 'CDELT3', 'CRPIX3', 'CUNIT3']
-            for key in keys_to_remove:
-                if key in header_2d:
-                    del header_2d[key]
+        # Update NAXIS to 2
+        header_2d['NAXIS'] = 2
 
-            # Update NAXIS to 2
-            header_2d['NAXIS'] = 2
+        # Add metadata about the moment map
+        moment_type = self.current_params['moment']
+        header_2d['COMMENT'] = f'Moment {moment_type} map'
+        header_2d['COMMENT'] = f'Generated with moment-explorer'
+        header_2d['COMMENT'] = f'Channels: {self.current_params["first"]}-{self.current_params["last"]}'
+        header_2d['COMMENT'] = f'Clip sigma: {self.current_params["clip_sigma"]}'
 
-            # Add comment about the moment map
-            header_2d['COMMENT'] = f'Moment {self.current_params["moment"]} map'
-            header_2d['COMMENT'] = f'Generated with moment-explorer'
-            header_2d['BUNIT'] = 'Jy/beam' if method in ['zeroth', 'eighth'] else 'km/s'
+        # Set appropriate BUNIT
+        if moment_type in ['M0', 'M8']:
+            header_2d['BUNIT'] = 'Jy/beam km/s' if moment_type == 'M0' else 'Jy/beam'
+        else:  # M1, M9
+            header_2d['BUNIT'] = 'km/s'
 
-            # Create HDU and save
-            hdu = fits.PrimaryHDU(moment_data, header=header_2d)
-            hdu.writeto(output_path, overwrite=True)
+        # Create HDU and save
+        hdu = fits.PrimaryHDU(self.current_moment.astype(np.float32), header=header_2d)
+        hdu.writeto(output_path, overwrite=True)
 
-            return output_path
+        return output_path
 
     def get_wcs_extent(self):
         """
