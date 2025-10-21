@@ -279,26 +279,105 @@ def create_launcher_ui():
 def main():
     """
     Main entry point for command-line usage.
-
-    Note: This requires Jupyter/IPython to be running.
-    For non-interactive CLI usage, import the package directly in Python.
     """
-    print("Moment Explorer - Interactive Tool")
-    print("\nThis tool requires Jupyter Notebook or JupyterLab to run.")
-    print("\nTo launch:")
-    print("  1. Start Jupyter: jupyter lab")
-    print("  2. Create a new notebook")
-    print("  3. Run:")
-    print()
-    print("     from moment_explorer.cli import create_launcher_ui")
-    print("     from IPython.display import display")
-    print("     display(create_launcher_ui())")
-    print()
-    print("Or use the package directly:")
-    print()
-    print("     from moment_explorer import create_interactive_explorer")
-    print("     explorer, ui = create_interactive_explorer('cube.fits', 'mask.fits')")
+    import argparse
+    import subprocess
+
+    parser = argparse.ArgumentParser(
+        description='Moment Explorer - Interactive FITS cube moment map tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Launch Jupyter Lab with example notebook
+  moment-explorer notebook
+
+  # Open example notebook in current directory
+  moment-explorer notebook --here
+
+  # Display help
+  moment-explorer --help
+
+For interactive use in Python/Jupyter:
+  from moment_explorer import create_multi_cube_explorer
+  explorer, ui, selector = create_multi_cube_explorer(available_cubes)
+        """
+    )
+
+    parser.add_argument(
+        'command',
+        nargs='?',
+        choices=['notebook', 'help'],
+        default='help',
+        help='Command to run'
+    )
+
+    parser.add_argument(
+        '--here',
+        action='store_true',
+        help='Copy example notebook to current directory'
+    )
+
+    args = parser.parse_args()
+
+    if args.command == 'help' or args.command is None:
+        parser.print_help()
+        print("\n" + "="*60)
+        print("Moment Explorer Quick Start")
+        print("="*60)
+        print("\nThis tool requires Jupyter Notebook/Lab to run interactively.")
+        print("\nRecommended workflow:")
+        print("  1. Run: moment-explorer notebook")
+        print("  2. This opens the example notebook in Jupyter Lab")
+        print("  3. Follow the notebook instructions to explore your data")
+        print("\nOr use in a Python script/notebook:")
+        print("  from moment_explorer import create_interactive_explorer")
+        print("  explorer, ui = create_interactive_explorer('cube.fits', 'mask.fits')")
+        return 0
+
+    elif args.command == 'notebook':
+        # Find the example notebook
+        import os
+        pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        example_nb = os.path.join(pkg_dir, 'examples', 'interactive_moment_maker.ipynb')
+
+        if not os.path.exists(example_nb):
+            print(f"❌ Error: Example notebook not found at {example_nb}")
+            return 1
+
+        if args.here:
+            # Copy to current directory
+            import shutil
+            dest = os.path.join(os.getcwd(), 'interactive_moment_maker.ipynb')
+            if os.path.exists(dest):
+                response = input(f"File {dest} already exists. Overwrite? [y/N]: ")
+                if response.lower() != 'y':
+                    print("Cancelled.")
+                    return 0
+            shutil.copy(example_nb, dest)
+            print(f"✓ Copied notebook to {dest}")
+            notebook_path = dest
+        else:
+            notebook_path = example_nb
+
+        # Try to launch Jupyter Lab, fall back to classic notebook
+        print("🚀 Launching Jupyter Lab...")
+        try:
+            subprocess.run(['jupyter', 'lab', notebook_path], check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print("⚠️  Jupyter Lab not found, trying classic Jupyter Notebook...")
+            try:
+                subprocess.run(['jupyter', 'notebook', notebook_path], check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                print("\n❌ Error: Jupyter is not installed.")
+                print("\nPlease install Jupyter:")
+                print("  pip install jupyterlab")
+                print("\nOr:")
+                print("  pip install jupyter")
+                return 1
+
+        return 0
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    sys.exit(main())

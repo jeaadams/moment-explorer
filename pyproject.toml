@@ -44,6 +44,9 @@ dev = [
 Homepage = "https://github.com/jeaadams/moment-explorer"
 Repository = "https://github.com/jeaadams/moment-explorer"
 
+[project.scripts]
+moment-explorer = "moment_explorer.cli:main"
+
 [tool.setuptools]
 packages = ["moment_explorer"]
 package-dir = {"" = "src"}

@@ -32,6 +32,25 @@ pip install -e .
 - plotly >= 5.0
 - ipywidgets >= 8.0
 
+## Command-Line Usage
+
+After installation, the `moment-explorer` command is available:
+
+```bash
+# Launch Jupyter Lab with the example notebook
+moment-explorer notebook
+
+# Copy the example notebook to the current directory
+moment-explorer notebook --here
+
+# Display help
+moment-explorer --help
+```
+
+The `moment-explorer notebook` command automatically opens Jupyter Lab with the example notebook, which demonstrates all features including the multi-cube explorer, launcher UI, single-cube explorer, and cube viewer.
+
+For interactive use, all functionality requires Jupyter (Notebook or Lab). The package is not designed as a standalone CLI tool, but rather as a Jupyter-based interactive analysis tool with a convenient launcher.
+
 ## Quick Start
 
 ### Option 1: Multi-Cube Explorer with Dropdown (Recommended)
