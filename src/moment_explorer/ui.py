@@ -157,13 +157,14 @@ class MomentMapUI:
 
         # Clip sigma slider
         self.widgets['clip_sigma'] = widgets.FloatSlider(
-            value=3.0,
-            min=1.0,
+            value=0.0,  # Default to 0 (no clipping)
+            min=0.0,
             max=10.0,
             step=0.5,
             description='Clip σ:',
             continuous_update=False,
-            style={'description_width': '100px'}
+            style={'description_width': '100px'},
+            readout_format='.1f'
         )
 
         # Use mask checkbox
@@ -212,6 +213,14 @@ class MomentMapUI:
             value=f"<b>Cube shape:</b> {self.explorer.data.shape} | <b>Last compute:</b> -- ms"
         )
 
+        # Help text for clip sigma
+        self._clip_help = widgets.HTML(
+            value=(
+                "<small><i>💡 Clip σ: Set to 0 for no clipping (recommended for M0). "
+                "Values &gt; 0 exclude pixels below σ×RMS (useful for M1/M9).</i></small>"
+            )
+        )
+
         # Save output
         self._save_output = widgets.Output()
 
@@ -258,6 +267,15 @@ class MomentMapUI:
             self.widgets['first_channel'].value = first
             self.widgets['last_channel'].value = last
 
+        # Check for M0 with sigma clipping and show warning
+        warning_msg = ""
+        if moment == 'M0' and clip_sigma > 0:
+            warning_msg = (
+                "<span style='color:orange;'>⚠ Warning: Sigma clipping is enabled for M0. "
+                "This is NOT recommended as it excludes faint emission and underestimates total flux. "
+                "Set clip σ to 0 to disable clipping for M0.</span><br>"
+            )
+
         # Generate moment map
         try:
             moment_map, compute_time = self.explorer.generate(
@@ -271,12 +289,13 @@ class MomentMapUI:
             # Update the plot
             self._update_plot(moment_map, moment)
 
-            # Update status
-            self._status_label.value = (
+            # Update status with optional warning
+            status_msg = (
                 f"<b>Cube shape:</b> {self.explorer.data.shape} | "
                 f"<b>Last compute:</b> {compute_time*1000:.1f} ms | "
                 f"<b>Data range:</b> [{np.nanmin(moment_map):.2e}, {np.nanmax(moment_map):.2e}]"
             )
+            self._status_label.value = warning_msg + status_msg
 
         except Exception as e:
             self._status_label.value = f"<b style='color:red;'>Error:</b> {str(e)}"
@@ -362,6 +381,7 @@ class MomentMapUI:
 
         ui = widgets.VBox([
             controls,
+            self._clip_help,
             buttons,
             self._status_label,
             self.fig,
@@ -542,6 +562,7 @@ def create_multi_cube_explorer(available_cubes, enable_prefix_sums=True, default
         load_output,
         widgets.HTML('<hr style="margin: 10px 0;">'),  # Separator
         controls,
+        ui._clip_help,
         buttons,
         ui._status_label,
         ui.fig,

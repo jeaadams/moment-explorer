@@ -152,12 +152,19 @@ class MomentMapExplorer:
         )
 
         # Apply masks based on moment type
+        # Note: Now applies threshold mask to all moment types if clip_sigma is provided
         if moment in ['M0', 'M8']:
             if use_mask:
+                # Apply user mask and optionally threshold mask
                 masked_data = self.data * channel_mask * self.mask
+                if clip_sigma > 0:  # Apply clipping if requested
+                    masked_data = masked_data * threshold_mask
             else:
+                # Apply only channel mask and optionally threshold mask
                 masked_data = self.data * channel_mask
-        else:  # M1 or M9
+                if clip_sigma > 0:  # Apply clipping if requested
+                    masked_data = masked_data * threshold_mask
+        else:  # M1 or M9 - always use threshold mask
             masked_data = self.data * threshold_mask * channel_mask
 
         # Compute the moment
