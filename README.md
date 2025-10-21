@@ -2,16 +2,16 @@
 
 Interactive Plotly-based moment map visualization tool for FITS spectral cubes, powered by [bettermoments](https://github.com/richteague/bettermoments).
 
-**New to moment-explorer?** See [GETTING_STARTED.md](GETTING_STARTED.md) for a 5-minute quick start guide.
-**Need help finding docs?** Check [INDEX.md](INDEX.md) for a complete navigation guide.
-**Migrating from the old notebook?** Read [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md).
-
 ## Features
 
 - **Multiple moment types**: M0 (integrated intensity), M1 (velocity), M8 (peak intensity), M9 (linewidth)
+- **Multi-cube explorer**: Dropdown selector to switch between multiple cubes
+- **Cube viewer**: Channel-by-channel visualization with mask overlay
+- **Interactive launcher**: File browser UI for easy cube/mask selection
 - **WCS support**: Automatic coordinate display when FITS headers are available
 - **Interactive controls**: ipywidgets for channel range, clipping, masking, and color scales
-- **One-click FITS export**: Save moment maps directly from the UI
+- **One-click FITS export**: Save moment maps (and uncertainties) directly from the UI
+- **Smart sigma clipping**: Works for all moment types with intelligent warnings
 
 ## Installation
 
@@ -47,15 +47,13 @@ moment-explorer notebook --here
 moment-explorer --help
 ```
 
-The `moment-explorer notebook` command automatically opens Jupyter Lab with the example notebook, which demonstrates all features including the multi-cube explorer, launcher UI, single-cube explorer, and cube viewer.
-
-For interactive use, all functionality requires Jupyter (Notebook or Lab). The package is not designed as a standalone CLI tool, but rather as a Jupyter-based interactive analysis tool with a convenient launcher.
+The `moment-explorer notebook` command automatically opens Jupyter Lab with the example notebook.
 
 ## Quick Start
 
-### Option 1: Multi-Cube Explorer with Dropdown (Recommended)
+### Option 1: Multi-Cube Explorer (Recommended)
 
-**NEW!** Easily switch between multiple cubes with a dropdown selector:
+Easily switch between multiple cubes with a dropdown selector:
 
 ```python
 from moment_explorer import create_multi_cube_explorer
@@ -77,35 +75,9 @@ available_cubes = {
 explorer, ui, selector = create_multi_cube_explorer(available_cubes)
 ```
 
-### Option 2: Interactive Launcher UI
+### Option 2: Cube Viewer (Channel Explorer)
 
-**NEW!** Point-and-click file selection interface:
-
-```python
-from moment_explorer import create_launcher_ui
-from IPython.display import display
-
-# Display file browser UI
-display(create_launcher_ui())
-# Fill in paths and click "Launch Explorer"
-```
-
-### Option 3: Single Cube Explorer
-
-```python
-from moment_explorer import create_interactive_explorer
-
-# Load a cube and create the interactive UI
-explorer, ui = create_interactive_explorer(
-    cube_path='path/to/your/cube.fits',
-    mask_path='path/to/your/mask.fits',  # optional
-    enable_prefix_sums=True  # faster M0/M1 computation
-)
-```
-
-### Option 4: Cube Viewer (Channel Explorer)
-
-**NEW!** Explore individual channels with mask overlay:
+Explore individual channels with mask overlay:
 
 ```python
 from moment_explorer import create_cube_viewer
@@ -124,9 +96,92 @@ All UI options display automatically with:
 - Color scale selector
 - Auto-apply toggle with debouncing
 - Apply, Save FITS, and Reset View buttons
-- **NEW:** Sigma clipping now works for all moment types with smart warnings!
 
-### Programmatic Usage
+## Usage Guide
+
+### Interactive Controls
+
+**Moment Dropdown**
+- Select M0 (integrated intensity), M1 (velocity), M8 (peak), or M9 (linewidth)
+- Switching moment types triggers immediate update
+- Colorscale automatically adjusts for M1 (velocity maps use RdBu_r)
+
+**Channel Sliders**
+- Set first and last channel for moment map computation
+- Range automatically adjusts when switching cubes
+
+**Clip σ Slider** (range: 0.0 to 10.0)
+- **0.0**: No clipping (recommended for M0)
+- **>0**: Excludes pixels below σ × RMS from the calculation
+- Smart warnings appear when using inappropriate clipping (e.g., M0 with clipping)
+
+**Auto-Apply Checkbox**
+- When enabled: Updates automatically after 200ms of inactivity
+- When disabled: Use "Apply" button for manual control
+- Recommended: Enable for exploration, disable for precise control
+
+**Buttons**
+- **Apply**: Manually update the plot with current settings
+- **Save FITS**: Save both moment map and uncertainty (dM0, dM1, etc.) to FITS files
+- **Reset View**: Restore default zoom/pan state
+
+### Sigma Clipping Best Practices
+
+| Moment | Recommended Clip σ | Reason |
+|--------|-------------------|--------|
+| **M0** | **0** | Preserves total flux; faint emission contributes to integrated intensity |
+| **M1** | **3-5** | Excludes noise from velocity measurements |
+| **M8** | **0** | Peak is already robust; use mask for spatial selection |
+| **M9** | **3-5** | Prevents noise from artificially broadening lines |
+
+**Warning System**: Orange warning appears if you use M0 with clipping enabled, reminding you this underestimates total flux.
+
+### Cube Viewer Controls
+
+**Channel Slider**
+- Navigate through all channels of your cube
+- Updates velocity display in plot title
+
+**Intensity Scaling**
+- Manual vmin/vmax controls or auto-scaling (1st to 99th percentile)
+- Auto-scale checkbox updates scaling on each channel change
+
+**Mask Overlay**
+- Toggle red contour overlay showing mask boundaries
+- Useful for verifying mask coverage across channels
+
+**Use Cases**
+- Find emission channels before creating moment maps
+- Verify mask coverage across velocity range
+- Check for artifacts or bad channels
+- Explore velocity structure channel-by-channel
+
+### Saving Moment Maps
+
+When you click "Save FITS", the following files are saved:
+
+```
+# Moment map
+/path/to/cube_M0.fits
+
+# Uncertainty map
+/path/to/cube_dM0.fits
+```
+
+Files are saved in the same directory as your input cube with automatic naming:
+- `{cube_name}_M0.fits`, `{cube_name}_dM0.fits` (integrated intensity + uncertainty)
+- `{cube_name}_M1.fits`, `{cube_name}_dM1.fits` (velocity + uncertainty)
+- `{cube_name}_M8.fits`, `{cube_name}_dM8.fits` (peak + uncertainty)
+- `{cube_name}_M9.fits`, `{cube_name}_dM9.fits` (linewidth + uncertainty)
+
+FITS headers include metadata:
+- Moment type and parameters used
+- Channel range
+- Clipping threshold
+- Proper WCS coordinates (2D projection of cube WCS)
+- Correct BUNIT (Jy/beam km/s for M0, km/s for M1/M9, etc.)
+
+## Programmatic Usage
 
 ```python
 from moment_explorer import MomentMapExplorer
@@ -140,91 +195,19 @@ moment_map, compute_time = explorer.generate(
     moment='M0',
     first=30,
     last=70,
-    clip_sigma=3.0,
+    clip_sigma=0.0,  # No clipping for M0
     use_mask=True
 )
 
 print(f"Computed in {compute_time*1000:.1f} ms")
 
-# Save to FITS
-output_path = explorer.save()
-print(f"Saved to {output_path}")
+# Save to FITS (returns list of paths: [moment_map, uncertainty_map])
+output_paths = explorer.save()
+for path in output_paths:
+    print(f"Saved to {path}")
 ```
 
-## API Reference
-
-### `MomentMapExplorer`
-
-Core class for moment map computation.
-
-#### Methods
-
-- **`load_cube(cube_path, mask_path=None)`**: Load FITS cube and optional mask
-  - Returns: Dictionary with cube info (shape, velocity range, RMS, etc.)
-
-- **`generate(moment, first, last, clip_sigma, use_mask)`**: Compute a moment map
-  - `moment`: 'M0', 'M1', 'M8', or 'M9'
-  - `first`, `last`: Channel range (inclusive)
-  - `clip_sigma`: Clipping threshold in units of RMS
-  - `use_mask`: Boolean to apply user mask
-  - Returns: (moment_map, compute_time)
-
-- **`enable_prefix_sums(flag=True)`**: Enable/disable prefix-sum optimization for M0/M1
-  - Speeds up M0/M1 by ~2-5x
-  - Uses additional memory for cumulative sums
-
-- **`save(path=None)`**: Save current moment map to FITS
-  - If `path` is None, auto-generates filename based on cube path
-  - Returns: Path to saved file
-
-- **`get_wcs_extent()`**: Get WCS extent for plotting
-  - Returns: (xmin, xmax, ymin, ymax) in arcsec offsets, or None
-
-### `create_interactive_explorer`
-
-Convenience function to create and display the full interactive UI.
-
-```python
-explorer, ui = create_interactive_explorer(
-    cube_path,
-    mask_path=None,
-    enable_prefix_sums=True
-)
-```
-
-Returns:
-- `explorer`: MomentMapExplorer instance
-- `ui`: MomentMapUI instance
-
-## Performance
-
-### Prefix-Sum Optimization
-
-For M0 and M1 moment maps, the package supports an optional prefix-sum optimization:
-
-```python
-S0 = np.cumsum(data * mask, axis=0)
-S1 = np.cumsum(velax[:,None,None] * data * mask, axis=0)
-M0 = S0[j] - S0[i-1]
-M1 = (S1[j]-S1[i-1]) / (M0 + 1e-9)
-```
-
-This allows computing moment maps over arbitrary channel ranges in O(1) time after O(N) preprocessing.
-
-**Trade-offs:**
-- Speedup: 2-5x for typical cubes
-- Memory: +2x cube size for cached cumulative sums
-- Best for: Interactive exploration with frequent channel range changes
-
-### Debouncing
-
-The UI uses a 200ms debounce timer when "Auto-apply" is enabled. This prevents excessive recomputation during slider dragging while maintaining responsiveness.
-
-## Examples
-
-See [`examples/interactive_moment_maker.ipynb`](examples/interactive_moment_maker.ipynb) for a complete Jupyter notebook demo.
-
-### Batch Processing
+### Batch Processing Example
 
 ```python
 from moment_explorer import MomentMapExplorer
@@ -238,19 +221,140 @@ for cube, mask in zip(cubes, masks):
 
     # Generate all moment types
     for moment in ['M0', 'M1', 'M8', 'M9']:
-        explorer.generate(moment, 30, 70, 3.0, True)
-        explorer.save()
+        clip_sigma = 0.0 if moment in ['M0', 'M8'] else 3.0
+        explorer.generate(moment, 30, 70, clip_sigma, True)
+        paths = explorer.save()
+        print(f"{moment}: {paths[0]}")
 ```
 
-## Plotly Features
+## API Reference
 
-### Persistent View State
+### `MomentMapExplorer`
 
-The Plotly figure uses `uirevision="moment_explorer_v1"` to preserve zoom/pan state across updates.
+Core class for moment map computation.
+
+**Methods:**
+
+- **`load_cube(cube_path, mask_path=None)`**
+  - Load FITS cube and optional mask
+  - Returns: Dictionary with cube info (shape, velocity range, RMS, etc.)
+
+- **`generate(moment, first, last, clip_sigma, use_mask)`**
+  - Compute a moment map
+  - `moment`: 'M0', 'M1', 'M8', or 'M9'
+  - `first`, `last`: Channel range (inclusive)
+  - `clip_sigma`: Clipping threshold in units of RMS (0 = no clipping)
+  - `use_mask`: Boolean to apply user mask
+  - Returns: `(moment_map, compute_time)`
+
+- **`save(path=None)`**
+  - Save current moment map and uncertainty to FITS
+  - If `path` is None, auto-generates filename based on cube path
+  - Returns: List of paths `[moment_path, uncertainty_path]`
+
+- **`get_wcs_extent()`**
+  - Get WCS extent for plotting
+  - Returns: `(xmin, xmax, ymin, ymax)` in arcsec offsets, or None
+
+### `create_multi_cube_explorer`
+
+Create an explorer with dropdown selector for multiple cubes.
+
+```python
+explorer, ui, selector = create_multi_cube_explorer(
+    available_cubes,
+    default_cube=None  # Optional: cube key to load first
+)
+```
+
+Returns:
+- `explorer`: MomentMapExplorer instance
+- `ui`: MomentMapUI instance
+- `selector`: Dropdown widget for cube selection
+
+### `create_cube_viewer`
+
+Create a channel-by-channel viewer with mask overlay.
+
+```python
+viewer = create_cube_viewer(
+    cube_path,
+    mask_path=None
+)
+```
+
+Returns:
+- `viewer`: CubeMaskViewer instance with UI displayed
+
+## Examples
+
+See [`examples/interactive_moment_maker.ipynb`](examples/interactive_moment_maker.ipynb) for a complete Jupyter notebook demo including:
+- Multi-cube explorer with dropdown
+- Single-cube explorer
+- Cube viewer for channel exploration
+- Launcher UI for file selection
+- Programmatic usage examples
+- Batch processing workflows
+
+## Troubleshooting
+
+**Issue**: Moment dropdown doesn't update the plot
+
+**Solution**: This is now fixed - moment dropdown always triggers immediate update. Restart your Jupyter kernel if using an old version.
+
+---
+
+**Issue**: Error "Use `clip=None` to not use a threshold mask"
+
+**Solution**: This is fixed in the latest version. Set clip σ = 0 for no clipping. Restart your kernel after updating.
+
+---
+
+**Issue**: Can't find saved FITS files
+
+**Solution**: Files are saved in the same directory as your input cube. Check the console output after clicking "Save FITS" for the full absolute path.
+
+---
+
+**Issue**: Widgets not displaying
+
+**Solution**:
+```bash
+# For JupyterLab
+jupyter labextension install @jupyter-widgets/jupyterlab-manager
+
+# For classic Jupyter
+jupyter nbextension enable --py widgetsnbextension
+
+# Restart Jupyter
+```
+
+---
+
+**Issue**: Plotly figure not rendering
+
+**Solution**:
+```bash
+pip install plotly>=5.0 kaleido
+pip install "jupyterlab>=3" "ipywidgets>=7.6"
+
+# Restart Jupyter
+```
+
+---
+
+**Issue**: Slow updates
+
+**Solution**:
+- Disable auto-apply for large cubes
+- Use the Apply button for manual control
+- Close other notebook cells/viewers
+
+## Performance Notes
 
 ### In-Place Updates
 
-Updates are performed in-place using `fig.batch_update()` and direct assignment:
+The Plotly figure uses in-place updates for smooth performance:
 
 ```python
 with fig.batch_update():
@@ -259,55 +363,15 @@ with fig.batch_update():
     fig.layout.coloraxis.cmax = vmax
 ```
 
-This avoids recreating the entire figure and ensures smooth performance.
+This avoids recreating the entire figure and preserves zoom/pan state via `uirevision="moment_explorer_v1"`.
 
-### Color Scales
+### Debouncing
 
-Available color scales:
-- **Viridis** (default for M0, M8)
-- **Cividis**
-- **Magma**
-- **Plasma**
-- **RdBu_r** (default for M1, diverging)
-- **Jet**
+When "Auto-apply" is enabled, a 200ms debounce timer prevents excessive recomputation during slider dragging.
 
-## Development
+### WebGL Acceleration
 
-### Running Tests
-
-```bash
-pytest
-```
-
-### Building Documentation
-
-```bash
-# Coming soon
-```
-
-## Troubleshooting
-
-**Issue**: Slow updates even with prefix sums enabled
-
-**Solution**: The UI automatically tries to use `Heatmapgl` (WebGL-accelerated) but falls back to standard `Heatmap` if not available. If you see the message "Using standard Heatmap", consider upgrading Plotly: `pip install --upgrade plotly`
-
----
-
-**Issue**: Color scale doesn't update automatically
-
-**Solution**: The color scale dropdown updates the figure immediately. For moment-dependent scales (e.g., RdBu_r for M1), change the moment type dropdown.
-
----
-
-**Issue**: "No cube loaded" error
-
-**Solution**: Ensure `load_cube()` is called before `generate()` or creating the UI.
-
----
-
-**Issue**: `AttributeError: module 'plotly.graph_objects' has no attribute 'Heatmapgl'`
-
-**Solution**: This is automatically handled by the fallback to standard `Heatmap`. The package works with older Plotly versions. To get better performance with WebGL acceleration, upgrade Plotly: `pip install --upgrade plotly>=5.0`
+The UI automatically tries to use `Heatmapgl` (WebGL-accelerated) but falls back to standard `Heatmap` if not available. For best performance, use Plotly >= 5.0.
 
 ## License
 

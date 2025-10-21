@@ -229,9 +229,12 @@ class MomentMapUI:
         self.widgets['save_button'].on_click(lambda b: self._on_save())
         self.widgets['reset_button'].on_click(lambda b: self._on_reset_view())
 
-        # Connect auto-apply
-        for key in ['moment', 'first_channel', 'last_channel', 'clip_sigma', 'use_mask']:
+        # Connect auto-apply for most parameters
+        for key in ['first_channel', 'last_channel', 'clip_sigma', 'use_mask']:
             self.widgets[key].observe(self._on_param_change, names='value')
+
+        # Moment dropdown always triggers immediate update (critical parameter)
+        self.widgets['moment'].observe(self._on_moment_change, names='value')
 
         # Connect colorscale change
         self.widgets['colorscale'].observe(self._on_colorscale_change, names='value')
@@ -246,6 +249,17 @@ class MomentMapUI:
             # Start new debounce timer
             self.debounce_timer = Timer(self._debounce_delay, self._on_apply)
             self.debounce_timer.start()
+
+    def _on_moment_change(self, change):
+        """Handle moment dropdown changes - always triggers immediate update."""
+        # Update colorscale suggestion for M1 (velocity maps)
+        moment_type = change['new']
+        if moment_type == 'M1':
+            if self.widgets['colorscale'].value not in ['RdBu_r']:
+                self.widgets['colorscale'].value = 'RdBu_r'
+
+        # Always apply immediately when moment type changes
+        self._on_apply()
 
     def _on_colorscale_change(self, change):
         """Handle colorscale dropdown changes."""
@@ -338,10 +352,11 @@ class MomentMapUI:
             self._save_output.clear_output()
             try:
                 import os
-                path = self.explorer.save()
-                abs_path = os.path.abspath(path)
+                paths = self.explorer.save()
                 print(f"✓ Moment map saved to:")
-                print(f"  {abs_path}")
+                for path in paths:
+                    abs_path = os.path.abspath(path)
+                    print(f"  {abs_path}")
             except Exception as e:
                 print(f"✗ Error saving: {str(e)}")
 
@@ -394,14 +409,13 @@ class MomentMapUI:
         display(ui)
 
 
-def create_interactive_explorer(cube_path, mask_path=None, enable_prefix_sums=True):
+def create_interactive_explorer(cube_path, mask_path=None):
     """
     Convenience function to create and display an interactive moment map explorer.
 
     Args:
         cube_path (str): Path to the FITS cube.
         mask_path (str): Path to the mask FITS file (optional).
-        enable_prefix_sums (bool): Enable prefix-sum optimization for M0/M1.
 
     Returns:
         tuple: (MomentMapExplorer, MomentMapUI)
@@ -416,11 +430,6 @@ def create_interactive_explorer(cube_path, mask_path=None, enable_prefix_sums=Tr
     print(f"Velocity range: {info['vel_range'][0]:.2f} to {info['vel_range'][1]:.2f} km/s")
     print(f"RMS: {info['rms']:.3e}")
 
-    # Enable prefix sums if requested
-    if enable_prefix_sums:
-        explorer.enable_prefix_sums(True)
-        print("Prefix-sum optimization enabled for M0/M1")
-
     # Create and display UI
     ui = MomentMapUI(explorer)
     ui.display()
@@ -428,7 +437,7 @@ def create_interactive_explorer(cube_path, mask_path=None, enable_prefix_sums=Tr
     return explorer, ui
 
 
-def create_multi_cube_explorer(available_cubes, enable_prefix_sums=True, default_cube=None):
+def create_multi_cube_explorer(available_cubes, default_cube=None):
     """
     Create an interactive explorer with a dropdown to switch between multiple cubes.
 
@@ -442,7 +451,6 @@ def create_multi_cube_explorer(available_cubes, enable_prefix_sums=True, default
                 },
                 ...
             }
-        enable_prefix_sums (bool): Enable prefix-sum optimization for M0/M1.
         default_cube (str): Key of the default cube to load. If None, loads first cube.
 
     Returns:
@@ -524,11 +532,6 @@ def create_multi_cube_explorer(available_cubes, enable_prefix_sums=True, default
 
     # Load initial cube
     load_selected_cube(default_cube)
-
-    # Enable prefix sums if requested
-    if enable_prefix_sums:
-        explorer.enable_prefix_sums(True)
-        print("Prefix-sum optimization enabled for M0/M1")
 
     # Create UI
     ui = MomentMapUI(explorer)

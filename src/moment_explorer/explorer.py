@@ -9,7 +9,7 @@ from astropy.io import fits
 
 class MomentMapExplorer:
     """
-    High-performance moment map generator with caching and optional prefix-sum optimization.
+    High-performance moment map generator for FITS spectral cubes.
 
     Attributes:
         data (np.ndarray): The spectral cube data (nchan, ny, nx).
@@ -20,7 +20,7 @@ class MomentMapExplorer:
         cube_path (str): Path to the loaded cube.
         mask_path (str): Path to the loaded mask (if any).
         current_moment (np.ndarray): The most recently computed moment map.
-        use_prefix_sums (bool): Whether to use prefix-sum optimization for M0/M1.
+        current_uncertainty (np.ndarray): The uncertainty map for the current moment.
     """
 
     def __init__(self):
@@ -33,13 +33,8 @@ class MomentMapExplorer:
         self.cube_path = None
         self.mask_path = None
         self.current_moment = None
+        self.current_uncertainty = None
         self.current_params = {}
-
-        # Prefix-sum caching
-        self.use_prefix_sums = False
-        self._S0 = None  # Cumulative sum for M0
-        self._S1 = None  # Cumulative sum for M1
-        self._prefix_mask = None  # Mask used for prefix sums
 
     def load_cube(self, cube_path, mask_path=None):
         """
@@ -70,60 +65,12 @@ class MomentMapExplorer:
         # Cache header for WCS
         self.header = fits.getheader(cube_path)
 
-        # Clear prefix sums (will be recomputed if needed)
-        self._S0 = None
-        self._S1 = None
-        self._prefix_mask = None
-
         return {
             'shape': self.data.shape,
             'vel_range': (float(self.velax[0]), float(self.velax[-1])),
             'rms': float(self.rms),
             'n_channels': len(self.velax)
         }
-
-    def enable_prefix_sums(self, flag=True):
-        """
-        Enable or disable prefix-sum optimization for M0/M1 computation.
-
-        Args:
-            flag (bool): Whether to enable prefix sums.
-        """
-        self.use_prefix_sums = flag
-        if not flag:
-            # Clear cached prefix sums
-            self._S0 = None
-            self._S1 = None
-            self._prefix_mask = None
-
-    def _compute_prefix_sums(self, channel_mask, use_mask):
-        """
-        Compute and cache prefix sums for M0/M1 optimization.
-
-        Args:
-            channel_mask (np.ndarray): Channel selection mask.
-            use_mask (bool): Whether to apply the user mask.
-        """
-        # Build the effective mask
-        if use_mask:
-            effective_mask = channel_mask * self.mask
-        else:
-            effective_mask = channel_mask
-
-        # Check if we need to recompute
-        if self._S0 is not None and np.array_equal(effective_mask, self._prefix_mask):
-            return  # Already computed
-
-        # Compute prefix sums
-        masked_data = self.data * effective_mask
-        self._S0 = np.cumsum(masked_data, axis=0)
-
-        # For M1: cumulative sum of velocity * intensity
-        vel_broadcasted = self.velax[:, None, None]
-        self._S1 = np.cumsum(vel_broadcasted * masked_data, axis=0)
-
-        # Cache the mask used
-        self._prefix_mask = effective_mask.copy()
 
     def _compute_moment_standard(self, moment, first, last, clip_sigma, use_mask):
         """
@@ -139,104 +86,77 @@ class MomentMapExplorer:
         Returns:
             np.ndarray: The computed moment map.
         """
-        # Create masks
+        # Create channel mask
         channel_mask = bm.get_channel_mask(
             data=self.data,
             firstchannel=first,
             lastchannel=last
         )
-        threshold_mask = bm.get_threshold_mask(
-            data=self.data,
-            clip=clip_sigma,
-            smooth_threshold_mask=0.0
-        )
+
+        # Create threshold mask only if clipping is requested
+        # bettermoments expects None (not 0.0) when no clipping is desired
+        if clip_sigma > 0:
+            threshold_mask = bm.get_threshold_mask(
+                data=self.data,
+                clip=clip_sigma,
+                smooth_threshold_mask=0.0
+            )
+        else:
+            threshold_mask = None
 
         # Apply masks based on moment type
-        # Note: Now applies threshold mask to all moment types if clip_sigma is provided
         if moment in ['M0', 'M8']:
+            # M0 and M8: use clipping only if explicitly requested
             if use_mask:
-                # Apply user mask and optionally threshold mask
                 masked_data = self.data * channel_mask * self.mask
-                if clip_sigma > 0:  # Apply clipping if requested
+                if threshold_mask is not None:
                     masked_data = masked_data * threshold_mask
             else:
-                # Apply only channel mask and optionally threshold mask
                 masked_data = self.data * channel_mask
-                if clip_sigma > 0:  # Apply clipping if requested
+                if threshold_mask is not None:
                     masked_data = masked_data * threshold_mask
-        else:  # M1 or M9 - always use threshold mask
-            masked_data = self.data * threshold_mask * channel_mask
+        else:  # M1 or M9
+            # M1 and M9: always use threshold mask if provided
+            if threshold_mask is not None:
+                masked_data = self.data * threshold_mask * channel_mask
+            else:
+                # If no clipping requested, use a minimal threshold (3 sigma)
+                threshold_mask = bm.get_threshold_mask(
+                    data=self.data,
+                    clip=3.0,
+                    smooth_threshold_mask=0.0
+                )
+                masked_data = self.data * threshold_mask * channel_mask
 
-        # Compute the moment
+        # Compute the moment (returns tuple: moment_map, uncertainty)
         if moment == 'M0':
-            result = bm.collapse_zeroth(
+            moment_map, uncertainty = bm.collapse_zeroth(
                 velax=self.velax,
                 data=masked_data,
                 rms=self.rms
-            )[0]
+            )
         elif moment == 'M1':
-            result = bm.collapse_first(
+            moment_map, uncertainty = bm.collapse_first(
                 velax=self.velax,
                 data=masked_data,
                 rms=self.rms
-            )[0]
+            )
         elif moment == 'M8':
-            result = bm.collapse_eighth(
+            moment_map, uncertainty = bm.collapse_eighth(
                 velax=self.velax,
                 data=masked_data,
                 rms=self.rms
-            )[0]
+            )
         elif moment == 'M9':
-            result = bm.collapse_ninth(
+            moment_map, uncertainty = bm.collapse_ninth(
                 velax=self.velax,
                 data=masked_data,
                 rms=self.rms
-            )[0]
+            )
         else:
             raise ValueError(f"Unknown moment type: {moment}")
 
-        return result
-
-    def _compute_moment_prefix(self, moment, first, last, use_mask):
-        """
-        Compute M0 or M1 using prefix-sum optimization.
-
-        Args:
-            moment (str): Moment type ('M0' or 'M1').
-            first (int): First channel index.
-            last (int): Last channel index.
-            use_mask (bool): Whether to apply the user mask.
-
-        Returns:
-            np.ndarray: The computed moment map.
-        """
-        # Create channel mask for prefix sum computation
-        channel_mask = np.zeros_like(self.data)
-        channel_mask[first:last+1, :, :] = 1.0
-
-        # Ensure prefix sums are computed
-        self._compute_prefix_sums(channel_mask, use_mask)
-
-        # Extract the range using prefix sums
-        if first == 0:
-            M0 = self._S0[last, :, :]
-            if moment == 'M1':
-                M1_numerator = self._S1[last, :, :]
-        else:
-            M0 = self._S0[last, :, :] - self._S0[first - 1, :, :]
-            if moment == 'M1':
-                M1_numerator = self._S1[last, :, :] - self._S1[first - 1, :, :]
-
-        if moment == 'M0':
-            # Convert to integrated intensity (multiply by channel width)
-            dv = np.abs(self.velax[1] - self.velax[0])
-            return M0 * dv
-        elif moment == 'M1':
-            # Compute velocity centroid
-            M1 = M1_numerator / (M0 + 1e-12)
-            # Mask out regions with no signal
-            M1[M0 < 3 * self.rms] = np.nan
-            return M1
+        return moment_map, uncertainty
 
     def generate(self, moment, first, last, clip_sigma, use_mask):
         """
@@ -261,13 +181,10 @@ class MomentMapExplorer:
 
         start_time = time.time()
 
-        # Use prefix sums for M0/M1 if enabled
-        if self.use_prefix_sums and moment in ['M0', 'M1']:
-            self.current_moment = self._compute_moment_prefix(moment, first, last, use_mask)
-        else:
-            self.current_moment = self._compute_moment_standard(
-                moment, first, last, clip_sigma, use_mask
-            )
+        # Compute moment map using bettermoments
+        self.current_moment, self.current_uncertainty = self._compute_moment_standard(
+            moment, first, last, clip_sigma, use_mask
+        )
 
         compute_time = time.time() - start_time
 
@@ -305,11 +222,14 @@ class MomentMapExplorer:
         # Create a 2D header from the 3D cube header
         header_2d = self.header.copy()
 
-        # Remove spectral axis keywords
-        keys_to_remove = ['NAXIS3', 'CTYPE3', 'CRVAL3', 'CDELT3', 'CRPIX3', 'CUNIT3']
+        # Remove all axis-3 and higher keywords
+        keys_to_remove = []
+        for key in header_2d.keys():
+            if any(key.endswith(str(i)) for i in range(3, 10)):  # Remove axis 3-9
+                keys_to_remove.append(key)
+
         for key in keys_to_remove:
-            if key in header_2d:
-                del header_2d[key]
+            del header_2d[key]
 
         # Update NAXIS to 2
         header_2d['NAXIS'] = 2
@@ -327,11 +247,26 @@ class MomentMapExplorer:
         else:  # M1, M9
             header_2d['BUNIT'] = 'km/s'
 
-        # Create HDU and save
+        # Save moment map
         hdu = fits.PrimaryHDU(self.current_moment.astype(np.float32), header=header_2d)
         hdu.writeto(output_path, overwrite=True)
 
-        return output_path
+        # Save uncertainty map if available
+        saved_paths = [output_path]
+        if self.current_uncertainty is not None:
+            uncertainty_path = output_path.replace(f'_{moment_type}.fits', f'_d{moment_type}.fits')
+
+            # Update header for uncertainty
+            header_uncertainty = header_2d.copy()
+            header_uncertainty['COMMENT'] = f'Uncertainty for {moment_type} map'
+            header_uncertainty['COMMENT'] = f'Generated with moment-explorer'
+
+            # Save uncertainty
+            hdu_uncertainty = fits.PrimaryHDU(self.current_uncertainty.astype(np.float32), header_uncertainty)
+            hdu_uncertainty.writeto(uncertainty_path, overwrite=True)
+            saved_paths.append(uncertainty_path)
+
+        return saved_paths
 
     def get_wcs_extent(self):
         """
